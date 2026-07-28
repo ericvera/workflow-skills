@@ -49,6 +49,12 @@ See docs/testing.md
 - write-e2e-test (skill): writing new end-to-end tests
 - docs/voice-guide.md: any user-facing copy
 
+## Models
+
+- implementer: opus
+- explore: opus
+- retrospective: opus
+
 ## Database migrations
 
 `yarn prisma migrate dev --name "<migration message>"`
@@ -79,6 +85,7 @@ would cost more to follow than to read:
 - **Test conventions** — authoring: where each kind of test lives, naming, frameworks, fixtures. The commands that _run_ tests are Quality commands.
 - **Test exceptions** — bulleted `condition — alternative verification` entries. Matching work is exempt from the regression-test / mandatory-e2e rules and verified the stated way instead; an exception changes the verification method, never removes verification. Suggest the purely-visual → screenshots entry as a default.
 - **Skills & guides** — open-ended list, one entry per line: `name-or-path (skill|doc[, required]): when to use`. `required` means the entry MUST be used whenever its condition matches (e.g. an e2e-runner skill that must never be bypassed).
+- **Models** — which subagent role runs on which model, one entry per line: `- <role>: <model>`. The six roles are `implementer` (the per-task implementer and every fix/retry dispatch), `reviewer` (the per-task review), `critic` (the requirements and plan critic gate), `acceptance` (the acceptance pass), `explore` (plan-stage read-only research), and `retrospective` (the close-out retrospective). Values are the Agent tool's model identifiers — `haiku`, `sonnet`, `opus`, `fable` — plus `session`, meaning inherit the session model. An absent section or an absent entry is no override, i.e. today's behavior, so setup writes only non-`session` entries and omits the section when every role is `session`.
 - **Database migrations** — the migration generation command, if the project has one.
 - **Backlog** — freeform instructions for fetching top to-do items from an external tracker; read verbatim.
 - **Retrospective** — a top-level value line (next to Branch convention), not a section, and only ever written as `Retrospective: off`: disables the post-acceptance retrospective (a subagent that mines the finished run for guidance improvements the user can adopt). Omit the line entirely to keep the retrospective on — that is the default.

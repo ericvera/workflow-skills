@@ -27,7 +27,7 @@ Fill each task file's Background from `goals.md` (repro steps, expected/actual, 
 2. **Deeply analyze the codebase** before writing anything. Understand the patterns in play — state management, routing, API endpoints, component structure, testing, whichever the project actually has — and the exact integration points.
 
    **Context management — critical to avoid "prompt too long" failures:**
-   - **Delegate broad exploration to read-only subagents** (Explore or general-purpose). Give each a focused question ("how does routing work", "where do settings persist") and ask for a compact summary: key paths, relevant functions/types/variables, patterns with file:line references, integration points. The files they read never enter your context.
+   - **Delegate broad exploration to read-only subagents** (Explore or general-purpose, either way role `explore` per Model routing). Give each a focused question ("how does routing work", "where do settings persist") and ask for a compact summary: key paths, relevant functions/types/variables, patterns with file:line references, integration points. The files they read never enter your context.
    - Read directly only the handful of files you'll cite most heavily, and spot-check any file:line reference a subagent gave you before copying it into a task file — task files must not contain unverified pointers.
 
 3. **Create `implementation_plan/`** in the mise directory now, before writing files into it.

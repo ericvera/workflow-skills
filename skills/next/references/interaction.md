@@ -20,7 +20,7 @@ There are exactly two **human gates**: the goals(+mock) gate at the start, and t
 
 ### The critic gate (requirements and plan stages)
 
-1. After writing the artifact, dispatch a **fresh-context critic subagent** (general-purpose Agent, run synchronously). Its prompt: read the artifact and the upstream doc(s) the dispatching stage names, plus any matching Skills & guides entries from `.claude/mise-config.md`, and report a list of concrete defects — the stage names what to check for — each tagged **blocking** (downstream stages would build the wrong behavior), **minor**, or **informative**. Ignore cosmetic nits.
+1. After writing the artifact, dispatch a **fresh-context critic subagent** (general-purpose Agent, run synchronously; role `critic` per Model routing). Its prompt: read the artifact and the upstream doc(s) the dispatching stage names, plus any matching Skills & guides entries from `.claude/mise-config.md`, and report a list of concrete defects — the stage names what to check for — each tagged **blocking** (downstream stages would build the wrong behavior), **minor**, or **informative**. Ignore cosmetic nits.
 2. **Pass = a report with zero blocking findings** — a fresh critic can always find _something_, so "no findings at all" is never the bar. Apply any minor findings worth fixing, without re-dispatching a critic over them.
 3. Blocking findings → revise and re-dispatch a fresh critic. **Stall** when a revision round fails to reduce the blocking count below the previous round's (the fixes aren't converging), or after **5 rounds** total as a backstop.
 4. At a stall, log friction (`critic <stage>: stalled at <n> blocking after <N> rounds`), then stop and present the artifact, the per-round blocking counts (the trend, not the raw defect list, is the user's decision signal), and the remaining blocking defects — an honest stall beats looping.
@@ -30,6 +30,10 @@ There are exactly two **human gates**: the goals(+mock) gate at the start, and t
 ### Assumptions instead of questions
 
 Stages past the goals gate never ask clarifying questions. Infer defaults from the goals, mocks, codebase, and `.claude/mise-config.md`, and record every non-obvious inference in an **Assumptions** section of the artifact so it is reviewable and covered by the stage's approval hash. Stop and ask only on a genuine blocker: a contradiction between docs, or missing information that no reasonable default resolves.
+
+## Model routing
+
+Every subagent this workflow dispatches has a named **role**: `implementer` (the per-task implementer plus the stuck-retry, post-review fix, and acceptance-blocker fix dispatches), `reviewer` (the per-task review), `critic` (the requirements and plan critic gate), `acceptance` (the acceptance pass), `explore` (plan-stage read-only research), and `retrospective` (the close-out retrospective). When the config's `## Models` section assigns a role a model, pass it as the Agent call's `model` parameter — generation work then runs on cheaper models while the session model stays the user's choice for everything unrouted. No `## Models` section, no entry for the role, or the value `session` → pass no `model` parameter and inherit the session model, so an absent assignment keeps today's behavior. If the harness's Agent tool has no model override, dispatch without one — a model assignment never blocks a dispatch.
 
 ## Asking the user questions
 

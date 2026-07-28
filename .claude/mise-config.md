@@ -23,3 +23,9 @@ Tests live next to the code they cover as `*.test.ts`, using the Node built-in t
 
 - docs/skill-authoring.md (doc): when writing or editing skill instruction files
 - docs/state-machine.md (doc): when touching state.ts or workflow-state semantics
+
+## Models
+
+- implementer: opus
+- explore: opus
+- retrospective: opus
