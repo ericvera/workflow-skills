@@ -16,7 +16,7 @@ Tests live next to the code they cover as `*.test.ts`, using the Node built-in t
 
 ## Test exceptions
 
-- Changes to skill/reference markdown (instruction files) — verify via critic review and a dry-run walkthrough; no unit test
+- Changes to markdown that ships as guidance — skill/reference instruction files, `docs/`, and `README.md` — verify via critic review plus a dry-run walkthrough (instruction files) or a term-for-term consistency check against the file it documents (`README.md`, `docs/`); no unit test
 - Anything that would need an e2e test (no e2e infrastructure exists) — verify with unit tests plus manual verification
 
 ## Skills & guides
