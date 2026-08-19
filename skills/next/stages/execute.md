@@ -2,73 +2,113 @@
 
 ## Role
 
-You are the **orchestrator**. You do not implement tasks yourself — each task runs in a subagent with a fresh context, so a late task in a long plan gets the same clean context as the first one. Your own context holds only the overview, the TODO list, and each subagent's short report; you never read task files or source code.
+You are the **orchestrator**: you dispatch every unit of work to a fresh-context subagent and implement, review, or document nothing yourself. Your context holds the overview, the TODO list, and the subagents' reports, never a task file or source. Each role is a general-purpose Agent, dispatched synchronously by the templates below with absolute paths; role model and friction lines per `../references/interaction.md`.
 
 ## Before starting
 
-1. **Read the overview file** at `<mise-directory>/implementation_plan/00_overview.md`. This is the ONLY plan file you read — never the task files.
+1. **Read the overview**, `<mise-directory>/implementation_plan/00_overview.md`.
+2. **Get `tasks_done`** from the state report that dispatched you (or `node ../scripts/state.ts report <mise-directory>`): a task is done when its file sits in `implementation_plan/done/`.
+3. **Baseline gate**, before the plan's first task only (`done/` empty): run the config's `Format`, `Check`, `Unit tests`; anything fails → stop and report.
+4. **Build the TODO list** from the remaining Task Index rows, in order: `Implement <mise-directory>/implementation_plan/<filename>`.
 
-2. **Get `tasks_done`** from the state-engine report that dispatched you (or run `node ../scripts/state.ts report <mise-directory>`) — a task is done exactly when its file sits in `implementation_plan/done/`, and the report reads that directory. Those tasks are complete from a previous session — exclude them. If all tasks are done, go straight to the acceptance pass (below).
+**Two-pass mode** = the config's `## Models` has a `documenter` line; single pass otherwise.
 
-3. **Baseline gate** — before the plan's first task only (`done/` is empty): run the project's Format, Check, and Unit-test commands (from `.claude/mise-config.md`). If anything fails, stop and report — the plan must start from a green baseline so that every later failure is unambiguously the work's to fix; pre-existing failures are the user's call, never yours. On a resumed session (tasks already in `done/`), skip the gate: every checkpoint ended green, so anything red now was introduced by this plan's work — the next subagent's verification catches and fixes it, and nothing mid-plan is ever "pre-existing".
+## Per task
 
-4. **Build the TODO list** from the remaining Task Index rows in the overview, in order, one entry per task:
+Work the TODO list in order, each entry in_progress while it runs:
 
-   `Implement <mise-directory>/implementation_plan/<filename>`
+1. **Dispatch an implementer**:
 
-## Executing tasks
+   ```
+   Read and follow the instructions at <skill-dir>/roles/implementer.md.
+   Task file: <this task's file>
+   Progress log: <mise-directory>/implementation_plan/_progress.md
+   Mise config: <project>/.claude/mise-config.md
+   ```
 
-Work through the TODO list in order. For each entry:
+2. **Failure** → log friction `task <ID>: <blocked|stuck> — <one-line cause>`, then:
+   - `blocked` → stop and relay the report.
+   - `stuck` → one fresh implementer, that prompt plus `Previous attempt's failure report: <the report>`; a second failure of either kind → stop and relay both.
 
-1. Mark it as in_progress.
-2. **Dispatch a fresh implementer subagent** (general-purpose Agent, run synchronously; role `implementer` per Model routing) with this prompt, all paths absolute:
+3. **Success** → **dispatch a reviewer**:
 
-   > Read and follow the instructions at `<skill-dir>/stages/implement_task.md`.
-   > Subject task file: `<path to this task's file>`
-   > Progress log: `<mise-directory>/implementation_plan/_progress.md`
-   > Mise config: `<project>/.claude/mise-config.md`
+   ```
+   Read and follow the instructions at <skill-dir>/roles/reviewer.md.
+   Task file: <this task's file>
+   Commits: <hash(es)>
+   Mise config: <project>/.claude/mise-config.md
+   Progress log: <mise-directory>/implementation_plan/_progress.md
+   ```
 
-   The subagent implements, verifies, self-reviews, appends to the progress log, commits, and reports back either success (commit hash + summary) or a failure report.
+   `none` → step 4. Defects → log friction `task <ID>: review found <defects, one line>`, then one implementer, step 1's prompt plus `Defects: <the reviewer's list>`. One fix round per task: anything but a clean success report from it → stop and report.
 
-3. **On failure**, route by the report's kind (`implement_task.md` defines both):
-   - **`blocked`** (missing dependency or API, design contradiction) → no retry can fix it: stop and relay the report to the user (see Stopping rules).
-   - **`stuck`** (out of hypotheses) → dispatch ONE fresh implementer for the same task, same prompt plus one line: `> Previous attempt's failure report: <the report>` — a fresh context often finds the approach a stuck one couldn't, and the report keeps it from repeating what failed. If the retry fails too, either kind, stop and relay both reports.
+4. **Record it done**: `mkdir -p <mise-directory>/implementation_plan/done && git mv <mise-directory>/implementation_plan/<task file> <mise-directory>/implementation_plan/done/`, commit `mise: task <ID> done`, mark the entry completed.
 
-   Either kind, log friction per `../references/interaction.md` (`task <ID>: <blocked|stuck> — <one-line cause>`). Never fix it yourself, and never dispatch a second retry.
+## End-of-plan gate
 
-4. **On success, dispatch a fresh reviewer subagent** (fresh context catches what the author's context rationalizes away; role `reviewer` per Model routing). Prompt it to: read the task file, run `git show <commit hash>`, and check the diff for missed requirements from the task spec, non-compliance with the task's Guides entries, bugs, security issues, and leftover debug code — reporting a list of concrete defects, or "none". Include any config Skills & guides entries whose condition targets reviewing this kind of work. Missing test coverage is a defect only if no Test exception cited in the task file excuses it. Ignore cosmetic nits. If it reports real defects, log friction (`task <ID>: review found <defects, one line>`) and dispatch one fix subagent (role `implementer` per Model routing) with the defect list and the same implement_task.md instructions (its task: fix the defects, re-verify, commit). One review/fix round per task — if the fix subagent's commit still looks wrong, stop and report.
-5. Record the task by moving its file into `done/` — `mkdir -p <mise-directory>/implementation_plan/done && git mv <mise-directory>/implementation_plan/<task file> <mise-directory>/implementation_plan/done/` — and commit (e.g. `mise: task <task ID> done`). The move is the completion record: it's what lets any checkout of the branch resume without redoing work. Mark the TODO entry completed and move on.
+Run it when the last task completes in-session, on any dispatch with all tasks done and no acceptance recorded, and again from step 1 after any commit lands past a finished gate (a repair, an acceptance-blocker fix):
 
-## Acceptance pass, then retrospective, then cleanup, then ship
+1. **Documenter**, two-pass mode only. `git log --grep '^Docs:' -1 <default>..HEAD` — `<default>` is the default branch's name (`main` or `master`); the range keeps the search to this branch's own commits: a hash with no commit after it → step 2; otherwise dispatch it:
 
-After the last task (or when dispatched with everything already done), walk the steps below from 1. Dispatched with `close_out` instead — a prior session already recorded and committed the user's confirmation — start at step 4's retrospective, skipping its recording clause (honor `Retrospective: off` as usual); if the retrospective also already ran (its adoption commit exists, or the user says so), start at step 6:
+   ```
+   Read and follow the instructions at <skill-dir>/roles/documenter.md.
+   Overview: <mise-directory>/implementation_plan/00_overview.md
+   Progress log: <mise-directory>/implementation_plan/_progress.md
+   Mise config: <project>/.claude/mise-config.md
+   ```
 
-1. **Dispatch a fresh acceptance subagent** (role `acceptance` per Model routing). Prompt it to: read `requirements.md` (`goals.md` on the bugfix route), read the plan overview and `_progress.md`, inspect the feature branch's commits, and verify each requirement is actually addressed — running the relevant e2e tests (via the Skills & guides entry that covers running them, when one is listed — honor its `required` flag) or the Test exceptions' substitute verifications where those apply. It returns a checklist: each requirement/goal with a verdict (verified — with what evidence · not verified — why) plus anything unverifiable.
-2. **Present the checklist to the user** and ask whether to close the feature out. This and the goals gate are the pipeline's only human gates.
-3. Items the user flags as wrong are blockers: log friction (`acceptance: user flagged <item> — <why>`, per `../references/interaction.md`), dispatch fix subagents (role `implementer` per Model routing) with the specifics, then re-run the acceptance pass.
-4. On the user's confirmation, record it — run `node ../scripts/state.ts approve <mise-directory> acceptance` and commit (e.g. `mise: accept`) — so an interrupted close-out resumes here (`close_out`) instead of re-running the pass. Then run the **retrospective** — skip straight to cleanup when the config has `Retrospective: off`. Dispatch a fresh retrospective subagent (general-purpose Agent, run synchronously; role `retrospective` per Model routing; a fresh context judges the run's friction without the attachment of having produced it) with this prompt, all paths absolute:
+   - `Docs pass committed` or `Docs pass: nothing to document.` → step 2.
+   - `failed (stuck)` or `failed (blocked)` → route as Per task step 2 (one fresh documenter on `stuck` with the previous report; stop on `blocked`); friction `gate: documenter <stuck|blocked> — <cause>`.
 
-   > Read and follow the instructions at `<skill-dir>/stages/retrospective.md`.
-   > Mise directory: `<mise-directory>`
-   > Mise config: `<project>/.claude/mise-config.md`
+2. **`Format`**; a run leaving changes in the tree is a failure, and the repair commits them.
+3. **`Check`**.
+4. **`Unit tests`**, the full suite.
+5. **The e2e and sanity runs** the overview's `## End-of-plan gate` section names, through the config's Skills & guides entry covering such runs, honoring `required`. No such section → grep the `End-to-end tests:` lines of the task files in `done/`, your one sanctioned peek, and run their union the same way.
 
-   It returns numbered improvement proposals, or no proposals — then just say so and go to cleanup. Present the proposals verbatim with the subagent's `Recommend` line and ask which to adopt, by number. Adopting is never required to finish — the work is already accepted, and rejecting everything just means cleanup.
+**A failed step** → log friction `gate: <what failed>`, dispatch one repair, re-run the gate from step 1; a second failure → stop and report. The repair:
 
-5. **Apply the adopted proposals** exactly as proposed — they touch only project guidance (the config, `CLAUDE.md`, guide docs, a new doc plus its config registration line), never source code or the plugin's files — and commit them as one ordinary (non-`mise:`) commit, e.g. `Adopt retrospective learnings: <summary>`: guidance edits are durable project content, not workflow bookkeeping. Relay plugin-candidate items as information for the user to take upstream; never act on them.
-6. **Clean up**: delete the mise directory `<mise-directory>/` entirely and commit the deletion (e.g. `mise: cleanup`) — the artifacts served their purpose; the merged history keeps the code and tests, not the docs. Report the feature finished.
-7. **Ship** per the config's `Ship` value: `pr` → push the branch and open a pull request summarizing the finished work; `merge` → merge the work branch into the default branch using the merge style recorded in the value (e.g. `merge (squash)`; no style recorded → ask); `off` → the user ships manually — just report the branch ready. No `Ship` value in the config → ask the user which of the three to do now, and suggest recording the answer via `/mise:next setup`. If shipping fails (auth, conflicts), report the branch name and the chosen action for the user to finish by hand — the work itself is already complete.
+- Prose failure in two-pass mode (`Check` failing inside a comment or doc) → the documenter, step 1's prompt plus `Defects: <what failed>`.
+- Anything else → an implementer, Per task step 1's prompt with `Fix scope: <what to fix>` + `Defects: <what failed>` in place of `Task file:`; it commits `Fix:`.
+
+## Acceptance and close-out
+
+On a `close_out` dispatch, start at step 4's retrospective, skipping its recording clause; that done too (its adoption commit exists, or the user says so) → step 6.
+
+1. **Dispatch acceptance** with the gate's results:
+
+   ```
+   Read and follow the instructions at <skill-dir>/roles/acceptance.md.
+   Requirements: <requirements.md, or goals.md on the bugfix route>
+   Overview: <mise-directory>/implementation_plan/00_overview.md
+   Progress log: <mise-directory>/implementation_plan/_progress.md
+   Mise config: <project>/.claude/mise-config.md
+   Gate results: <the gate's summary>
+   ```
+
+2. **Present its verdicts as returned** and ask whether to close the feature out.
+3. **Only items the user flags** are blockers: log friction `acceptance: user flagged <item> — <why>`, fix each (a prose item in two-pass mode through the documenter with a defect list, everything else through an implementer with `Fix scope:`), then re-run the gate from its step 1, and acceptance after it.
+4. **On the user's confirmation**, record it (`node ../scripts/state.ts approve <mise-directory> acceptance`, commit `mise: accept`). Then the **retrospective**, unless the config carries `Retrospective: off` (→ step 6):
+
+   ```
+   Read and follow the instructions at <skill-dir>/roles/retrospective.md.
+   Mise directory: <mise-directory>
+   Mise config: <project>/.claude/mise-config.md
+   ```
+
+   Present its proposals verbatim with its `Recommend` line and ask which to adopt, by number; no proposals → say so and go to step 6. Adopting is never required.
+
+5. **Apply the adopted proposals** exactly as proposed: project guidance only (the config, its `Checklist:` file, `CLAUDE.md`, a guide doc, a new doc plus its registration line), never source or plugin files, in one ordinary commit `Adopt retrospective learnings: <summary>`. Relay plugin candidates; never act on them.
+6. **Clean up**: delete `<mise-directory>/` entirely, commit `mise: cleanup`, report the feature finished.
+7. **Ship** per the config's `Ship` value: `pr` → push and open a pull request summarizing the work; `merge` → merge into the default branch in the recorded style (`merge (squash)`; none recorded → ask); `off` → report the branch ready. No `Ship` value → ask which of the three, and suggest `/mise:next setup` to record it. Shipping fails (auth, conflicts) → report the branch and the chosen action.
 
 ## Stopping rules
 
-Stop only on real blockers: the baseline gate failing, a `blocked` failure report, an implementer's `stuck` report that survived its one fresh retry, a fix subagent failing or its commit still looking wrong after review, or a genuine ambiguity unresolvable from the task file/codebase/config. If a subagent reports that a task file authorizes a red intermediate state, treat it as a planning bug — stop and ask the user to regenerate the plan. Otherwise keep going.
+Stop only at: a failed baseline gate, a `blocked` report, a `stuck` report that survived its retry, a fix round without a clean success report, a second gate failure, an ambiguity the overview and config cannot resolve. A subagent reporting that a task file authorizes a red intermediate state is a planning bug: stop and ask the user to regenerate the plan. A task note never beats a skill default on a safety or verification rule.
 
 ## Do not
 
-- Implement tasks or read task files in your own context — only the overview and subagent reports
-- Skip the baseline gate before the plan's first task, or let a subagent skip verification
-- Ask the user for confirmation between tasks while everything is green — just continue
-- Retry a failed task more than once — one fresh implementer for a `stuck` report, none for `blocked`
-- Skip the acceptance pass or delete the mise directory before the user confirms the checklist
-- Create a PR or merge before the cleanup commit lands — shipping is the close-out's final step, never earlier
-- Apply a retrospective proposal the user didn't adopt, or let one touch source code or plugin files
-- Ask the user which rule wins when a task note conflicts with a skill default — task notes never win on safety/verification rules
+- Skip the baseline gate before the plan's first task, the end-of-plan gate, or the acceptance pass, or let a subagent skip verification
+- Fix anything in the acceptance verdicts the user did not flag
+- Retry past the bound: one fresh subagent per `stuck`, one fix round per task, one repair per gate run
+- Delete the mise directory, open a PR, or merge before the user's confirmation and the cleanup commit
+- Apply a retrospective proposal the user didn't adopt, or let one touch source code or the plugin's files

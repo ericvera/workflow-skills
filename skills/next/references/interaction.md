@@ -1,64 +1,82 @@
 # Shared interaction conventions
 
-These conventions apply to every stage of the workflow. This file owns the conversation side — how gates run and how questions are asked; state semantics (approval hashes, the cascade, task completion) are the state engine's, and its reports say everything a stage needs.
+This file owns the conversation side of every stage: how gates run and how questions are asked. State semantics (approval hashes, the cascade, task completion) are the state engine's; its reports say what a stage needs.
 
 ## Gates
 
-There are exactly two **human gates**: the goals(+mock) gate at the start, and the acceptance pass at the end. Every stage in between self-approves through the critic gate below and continues in the same session — the user is never asked to approve requirements or plans.
+There are exactly two **human gates**: the goals(+mock) gate at the start and the acceptance pass at the end. Every stage between them self-approves through the critic gate and continues in the same session; the user is never asked to approve requirements or a plan.
 
 ### The human gate (goals stage only)
 
 1. After presenting the artifacts (and any revisions), ask explicitly: "Approve goals<and mocks, when present>, or what should change?"
-2. **Feedback, questions, or silence are NOT approval.** Revise and re-present until the user says yes. Never advance on an unapproved artifact.
-3. On explicit approval, run `node ../scripts/state.ts approve <mise-directory> goals route=<full|direct|bugfix>` (then `... approve <mise-directory> mock` when the route is `full`) — the route is recorded atomically with the goals approval, so decide it before gating. The engine hashes the artifact and records the approval; on a **changed re-approval** (the new hash differs from the recorded one) it also deletes every later stage's approval, since downstream docs were built against the previous version (first approvals and unchanged re-approvals delete nothing).
-4. Commit the mise directory (artifacts plus `.workflow-state`), e.g. `mise: approve goals`.
+2. **Feedback, questions, or silence are NOT approval** — never advance on an unapproved artifact. Revise and re-present until the user says yes.
+3. On explicit approval, run `node ../scripts/state.ts approve <mise-directory> goals route=<full|direct|bugfix>`, and on the `full` route `... approve <mise-directory> mock` after it. Decide the route before gating; it is recorded with the approval. A **changed re-approval** (new hash) also deletes every later stage's approval.
+4. Commit the mise directory (artifacts plus `.workflow-state`): `mise: approve goals`.
 5. Continue in-session: re-run the state engine report and dispatch the next stage without ending the turn.
 
 ### The friction log
 
-`<mise-directory>/_friction.md` is the run's record of friction — the raw material the close-out retrospective (`../stages/retrospective.md`, dispatched by execute after acceptance) mines for guidance improvements. Wherever a rule says to log friction: append one line, `<stage or task>: <what happened>`, creating the file with a `# Friction` heading if missing, and include it in the checkpoint commit that follows. Only the retrospective reads it, so entries are never a prompt tax on later stages.
+`<mise-directory>/_friction.md` is the run's record of friction; only the retrospective role reads it. Wherever a rule says to log friction, append one line, `<stage or task>: <what happened>`, creating the file with a `# Friction` heading if missing, and include it in the checkpoint commit that follows.
+
+While work is in flight, log every user chat message correcting the workflow's output or approach:
+
+```
+correction: <what>
+```
+
+Goals-gate iteration on the artifacts is not logged (the artifacts carry it); an acceptance flag is logged once, as its own `acceptance: user flagged <item> — <why>` line.
 
 ### The critic gate (requirements and plan stages)
 
-1. After writing the artifact, dispatch a **fresh-context critic subagent** (general-purpose Agent, run synchronously; role `critic` per Model routing). Its prompt: read the artifact and the upstream doc(s) the dispatching stage names, plus any matching Skills & guides entries from `.claude/mise-config.md`, and report a list of concrete defects — the stage names what to check for — each tagged **blocking** (downstream stages would build the wrong behavior), **minor**, or **informative**. Ignore cosmetic nits.
-2. **Pass = a report with zero blocking findings** — a fresh critic can always find _something_, so "no findings at all" is never the bar. Apply any minor findings worth fixing, without re-dispatching a critic over them.
-3. Blocking findings → revise and re-dispatch a fresh critic, tracking defect identity across the loop:
-   - **Classify** each blocking finding against the blocking findings of _all_ prior rounds in this loop: the same underlying defect, however reworded or re-anchored, is **recurring**; anything else is **fresh**. Comparing against every round rather than only the last is what catches a fix for A reintroducing B (A → B → A). Blocking counts never enter the decision — a round of all-new defects can match or exceed the previous round's count while every earlier fix held.
-   - Every blocker in the round is fresh → revise and re-dispatch; new territory is the loop working, not a stall.
-   - Each recurring blocker a round reports is one **recurrence event**. The loop's first recurrence event → give that blocker one more fix attempt and re-dispatch, since a lone recurrence is as often a bad fix or a fresh critic re-litigating a judgment call as it is a stuck loop.
-   - A stall trigger takes precedence over that retry — only the loop's first recurrence event can earn one, so a second recurrence stalls even when it is that blocker's own first.
-   - Log friction at each recurrence event as it happens (`critic <stage>: blocker recurred (<short defect name>), sighting <n>`), including the event that stalls the loop — the retrospective needs to know which defects fought back, not just that the loop ended.
-   - **Stall** on exactly three triggers, and no others:
-     - `third sighting` — the same blocker appears a third time, having survived two fix attempts;
-     - `ping-pong` — a second recurrence event lands on a different blocker, the signature of fixes trading one defect for another;
-     - `budget exhausted` — the last allowed round still reports blocking findings, with no round left to verify another fix.
-   - **Round budget**: **5** rounds per artifact version, no scaling with task count, file count, or artifact size. Exhaustion stalls on the final round's report as it stands — revising there would ship a fix no critic ever saw.
-   - A substantial mid-loop rewrite — a scope change that replaces the artifact's content, not a large revision answering findings — resets the round budget, the recurrence memory, and the recurrence-event count, because prior findings judged a document that no longer exists.
-   - **Absolute ceiling**: **8** rounds across all resets bound the loop while it runs unattended, so a run left alone always terminates. A round the user explicitly directs after a stall may exceed either budget and inherits the loop's memory — its findings are still classified against all prior rounds.
-4. At a stall, log friction (`critic <stage>: stalled (<trigger>) after <N> rounds`, naming the trigger that fired), then stop and present — an honest stall beats looping:
-   - the artifact, and the per-round blocking counts as history;
-   - each remaining blocking defect, labeled **recurring** or **fresh** — that split, not the counts, is the user's decision signal, since recurring defects point at the artifact's approach and fresh ones at unfinished detail;
-   - which trigger fired, so the user knows whether the loop ping-ponged or simply ran out of rounds.
-5. On a pass that took more than one round, log friction (`critic <stage>: <N> rounds, blocking <count per round>`) — a first-round pass is the expected case, not friction. Then run `node ../scripts/state.ts approve <mise-directory> <stage>`, commit the checkpoint (e.g. `mise: approve requirements`), and continue in-session to the next stage.
-6. If approving `plan` returns `cleared_done`, the engine deleted `implementation_plan/done/` — those tasks were completed under a different plan version, their work is already in the repo (git keeps the files' history), and the revised plan was written against that reality, so its tasks are all pending by definition. Just mention the cleared IDs in the checkpoint report.
+After writing the artifact, dispatch `../roles/critic.md` (general-purpose Agent, synchronous; role `critic` per Model routing) with this prompt, all paths absolute:
+
+```
+Read and follow the instructions at <skill-dir>/roles/critic.md.
+Artifact: <absolute path>   Kind: requirements | plan
+Upstream: <absolute paths of the docs it must be checked against>
+Mise config: <absolute path>
+```
+
+Then:
+
+1. **Zero blocking findings = pass**; a fresh critic always finds _something_. Apply worthwhile minor findings without re-dispatching.
+2. Blockers → revise and re-dispatch a fresh critic. Classify each blocker against the blocking findings of _all_ prior rounds, not just the last: the same underlying defect, however reworded, is **recurring**; anything else is **fresh**. Counts never decide.
+3. All fresh → revise and re-dispatch.
+4. Each recurring blocker is one **recurrence event**; log every event, the stalling one included:
+
+   ```
+   critic <stage>: blocker recurred (<short defect name>), sighting <n>
+   ```
+
+   The loop's **first** event earns that blocker one more fix attempt and a re-dispatch, unless a stall trigger fires; triggers take precedence.
+
+5. **Stall** on exactly three triggers: `third sighting` (a blocker survives two fix attempts); `ping-pong` (a second recurrence event, on a different blocker); `budget exhausted` (the last allowed round still reports blockers, and revising there would ship a fix no critic saw).
+6. **Budget: 5** rounds per artifact version, never scaled by task count or size; **ceiling: 8** across resets. A substantial mid-loop rewrite (a scope change replacing the artifact's content, not a large revision answering findings) resets the budget, the recurrence memory, and the event count. A user-directed round after a stall may exceed either budget and inherits the loop's memory.
+7. At a stall, log friction, then stop and present the artifact, the per-round blocking counts, each remaining blocker labeled **recurring** or **fresh**, and the trigger that fired:
+
+   ```
+   critic <stage>: stalled (<trigger>) after <N> rounds
+   ```
+
+8. On a pass that took more than one round, log friction:
+
+   ```
+   critic <stage>: <N> rounds, blocking <count per round>
+   ```
+
+9. Then run `node ../scripts/state.ts approve <mise-directory> <stage>`, commit `mise: approve <stage>`, and continue in-session; `cleared_done` from a plan approval → mention the cleared IDs in the checkpoint report.
 
 ### Assumptions instead of questions
 
-Stages past the goals gate never ask clarifying questions. Infer defaults from the goals, mocks, codebase, and `.claude/mise-config.md`, and record every non-obvious inference in an **Assumptions** section of the artifact so it is reviewable and covered by the stage's approval hash. Stop and ask only on a genuine blocker: a contradiction between docs, or missing information that no reasonable default resolves.
+Stages past the goals gate never ask clarifying questions. Infer defaults from the goals, mocks, codebase, and `.claude/mise-config.md`, and record every non-obvious inference in an **Assumptions** section of the artifact. Stop and ask only on a genuine blocker: a contradiction between docs, or missing information no reasonable default resolves.
 
 ## Model routing
 
-Every subagent this workflow dispatches has a named **role**: `implementer` (the per-task implementer plus the stuck-retry, post-review fix, and acceptance-blocker fix dispatches), `reviewer` (the per-task review), `critic` (the requirements and plan critic gate), `acceptance` (the acceptance pass), `explore` (plan-stage read-only research), and `retrospective` (the close-out retrospective). When the config's `## Models` section assigns a role a model, pass it as the Agent call's `model` parameter — generation work then runs on cheaper models while the session model stays the user's choice for everything unrouted. No `## Models` section, no entry for the role, or the value `session` → pass no `model` parameter and inherit the session model, so an absent assignment keeps today's behavior. If the harness's Agent tool has no model override, dispatch without one — a model assignment never blocks a dispatch.
+Every subagent has a named **role**: `implementer` (tasks, the `stuck` retry, per-task fixes, gate repairs, acceptance-blocker fixes), `reviewer` (per-task review), `critic` (the critic gate), `acceptance` (the acceptance pass), `explore` (plan-stage research), `documenter` (the end-of-plan prose pass and prose fix rounds), `retrospective` (the close-out retrospective). When the config's `## Models` section assigns a role a model, pass it as the Agent call's `model` parameter; no section, no entry, or the value `session` → pass no `model` parameter and inherit the session model. If the harness's Agent tool has no model override, dispatch without one; a model assignment never blocks a dispatch.
 
 ## Asking the user questions
 
-- Ask in small chunks: **1–3 related questions per turn**. Never dump a wall of questions.
-- Number each question (`1.`, `2.`, `3.`).
-- Letter each question's answer choices (`a.`, `b.`, `c.`).
-- Put each lettered option on its own line (one option per line, not inline).
-- This lets the user reply with a compact form like `1a,2c,3a`.
-
-Example:
+Ask **1–3 related questions per turn**. Number the questions (`1.`, `2.`), letter the choices (`a.`, `b.`), one per line, so the user can reply `1a,2c`.
 
 ```
 1. Where should X live?
@@ -71,16 +89,12 @@ Example:
    - b. No
 ```
 
-## Recommendations
-
-Always end your numbered/lettered questions with a recommendation line so the user can accept your read in one reply. If you're genuinely torn, still pick one and say so.
+End every set with a recommendation line; if you are torn, still pick one and say so.
 
 ```
-Recommend: 1a, 2a, 3c
+Recommend: 1a, 2a, 3c (reply `rec` to take all)
 ```
 
-Add a brief reason after any pick that isn't obvious (`1a — keeps the change scoped to the existing module`); skip rationale otherwise.
+Add a brief reason after any pick that isn't obvious (`1a — keeps the change scoped to the existing module`); skip rationale otherwise. The line always ends with the `rec` hint: that reply accepts every recommended pick (a bare `a` is an option letter, never this shortcut).
 
-## Other lists
-
-For any list the user might pick from or refer back to, use numbered items (`1.`, `2.`, `3.`) — not bullets — so they can respond by number.
+Number any other list the user might pick from or refer back to, so they can respond by number.

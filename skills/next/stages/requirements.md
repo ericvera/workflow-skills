@@ -1,29 +1,23 @@
 # Write Requirements
 
-Produce `requirements.md` from the approved goals (and mocks, when present). This stage runs past the human gate: it asks nothing, records assumptions instead, and self-approves through the critic gate in `../references/interaction.md`.
-
-## Input
-
-Working directory: `<mise-directory>/` (from the config).
+Produce `requirements.md` in `<mise-directory>/` (from the config) from the approved goals (and mocks, when present).
 
 ## Sources
 
 - `goals.md` — intent, scope, and the clarifying Q&A folded in at the goals gate.
-- `mocks.html` + `mocks.context.md` (full route) — the final UI state plus the Clarifying Q&A, New Concepts, and UI Tweaks Log. These are the durable record of the mock iteration; every logged tweak is a decision the requirements must reflect.
+- `mocks.html` + `mocks.context.md` (`full` route) — every logged tweak is a decision the requirements must reflect.
 - The codebase — existing functionality the feature integrates with or must preserve.
 
-If `requirements.md` already exists (a reopened stage), revise it against the current sources instead of regenerating.
+An existing `requirements.md` (a reopened stage) is revised against the current sources, never regenerated.
 
 ## Writing the document
 
-Create `<mise-directory>/requirements.md`:
-
-- **Focus on user-facing behavior** — WHAT the system does, never HOW it's built.
-- Use `REQ-<CATEGORY>-<N>` identifiers (e.g. `REQ-DIR-1`), grouped by functional area.
-- MUST/SHOULD/MAY language; each requirement testable.
+- **User-facing behavior only** — WHAT the system does, never HOW it's built.
+- `REQ-<CATEGORY>-<N>` identifiers, grouped by functional area.
+- MUST/SHOULD/MAY language; every requirement testable.
 - Reference existing behavior that must be preserved.
-- Include an **Out of Scope** section (behavior explored but deferred — mock variants that won't ship belong here).
-- Include an **Assumptions** section: every non-obvious inference made where the goals/mocks were silent (edge cases, error handling, defaults).
+- **Out of Scope**: behavior explored but deferred — mock variants that won't ship belong here.
+- **Assumptions**: every non-obvious inference made where the goals and mocks were silent (edge cases, error handling, defaults).
 
 ```markdown
 # Requirements
@@ -46,4 +40,4 @@ This document specifies the user-facing requirements for <feature>.
 
 ## Critic gate
 
-Critic gate per `../references/interaction.md` — this stage's critic checks `requirements.md` against `goals.md` and the mocks for: contradictions; unaddressed goals, logged tweaks, or new concepts; untestable or missing requirements; scope drift.
+Critic gate per `../references/interaction.md`: kind `requirements`, upstream `goals.md` (+ `mocks.html` / `mocks.context.md` when present).
