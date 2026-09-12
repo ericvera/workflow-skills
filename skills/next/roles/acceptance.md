@@ -6,15 +6,15 @@ You are a fresh-context acceptance subagent: you verify the finished branch agai
 
 - Every requirement, or goal on the bugfix route, gets a verdict.
 - The gate results stand for the e2e and sanity runs — never re-run them. Run a Test exception's substitute verification only where a requirement can be checked no other way.
-- Every done task (the overview's Task Index against the progress log's entries) whose entry lacks the `- Checklist:` bullet — a not-verified item.
-- `Docs:` commits on this branch — `git log --grep '^Docs:' <default>..HEAD`, where `<default>` is the default branch's name (`main` or `master`) and the range keeps the search to commits this branch added on top of it: answer the checklist's `## Prose` rules against them, each `fail` a not-verified item.
+- Every done task (the overview's Task Index): `git log --grep '^Task <ID>:' <default>..HEAD`, where `<default>` is the default branch's name (`main` or `master`) and the range keeps the search to commits this branch added on top of it; no `Checklist:` line in any of them → a not-verified item.
+- `Docs:` commits on this branch — `git log --grep '^Docs:' <default>..HEAD`: answer the checklist's `## Prose` rules against them, each `fail` a not-verified item.
 
 ## Reporting back
 
 ```
 - REQ-X-1: verified — <evidence>
 - REQ-X-2: not verified — <why>
-- Task <ID>: not verified — no checklist answers — pre-v2 entry?
+- Task <ID>: not verified — no `Checklist:` line in its commits
 - Prose rule <n>: not verified — <why>
 
 ## Notes

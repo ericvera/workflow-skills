@@ -34,18 +34,21 @@ The plan started green: every failure you hit is this plan's and yours to fix �
    ```markdown
    - Key changes: <files/symbols added or modified>
    - Deviations from plan: <none | what differed and why>
-   - Checklist: 1 pass — <one-clause evidence> · 2 n-a — <why> · 3 pass — <evidence> · …
    ```
 
-   Every rule number appears exactly once; the only values are `pass` and `n-a`.
+   One line each; anything longer belongs in the commit body.
 
-7. **Commit** the work and the log entry together, subject prefixed as your dispatch shape fixes:
+7. **Commit** the work and the log entry together, subject prefixed as your dispatch shape fixes, your checklist answers in the body:
 
    ```
    Task <ID>: <what this task accomplished>
 
    <report of what was built and why>
+
+   Checklist: 1 pass — <one-clause evidence> · 2 n-a — <why> · 3 pass — <evidence> · …
    ```
+
+   Every rule number appears exactly once; the only values are `pass` and `n-a`.
 
 ## Reporting back
 

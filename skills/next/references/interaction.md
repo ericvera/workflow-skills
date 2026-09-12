@@ -72,7 +72,7 @@ Stages past the goals gate never ask clarifying questions. Infer defaults from t
 
 ## Model routing
 
-Every subagent has a named **role**: `implementer` (tasks, the `stuck` retry, per-task fixes, gate repairs, acceptance-blocker fixes), `reviewer` (per-task review), `critic` (the critic gate), `acceptance` (the acceptance pass), `explore` (plan-stage research), `documenter` (the end-of-plan prose pass and prose fix rounds), `retrospective` (the close-out retrospective). When the config's `## Models` section assigns a role a model, pass it as the Agent call's `model` parameter; no section, no entry, or the value `session` → pass no `model` parameter and inherit the session model. If the harness's Agent tool has no model override, dispatch without one; a model assignment never blocks a dispatch.
+Every subagent has a named **role**: `implementer` (tasks, the `stuck` retry, per-task fixes, gate repairs, acceptance-blocker fixes), `reviewer` (per-task review), `critic` (the critic gate), `acceptance` (the acceptance pass), `explore` (plan-stage research), `documenter` (prose passes on tasks, per-task fixes, gate repairs, acceptance-blocker fixes), `retrospective` (the close-out retrospective). When the config's `## Models` section assigns a role a model, pass it as the Agent call's `model` parameter; no section, no entry, or the value `session` → pass no `model` parameter and inherit the session model. If the harness's Agent tool has no model override, dispatch without one; a model assignment never blocks a dispatch.
 
 ## Asking the user questions
 
